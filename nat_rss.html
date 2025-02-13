@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS 訂閱聚合</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .rss-item {
+            border-bottom: 1px solid #ddd;
+            padding: 10px 0;
+        }
+        .rss-item a {
+            text-decoration: none;
+            color: #0073e6;
+            font-size: 18px;
+        }
+        .rss-item a:hover {
+            text-decoration: underline;
+        }
+        .rss-date {
+            font-size: 14px;
+            color: gray;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>RSS 訂閱聚合</h1>
+    <div id="rss-feed"></div>
+
+    <script>
+        const rssUrls = [
+            "https://www.nature.com/nature.rss" // 這裡可以添加更多 RSS 訂閱網址
+        ];
+
+        async function fetchRSS(url) {
+            const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                return data.items || [];
+            } catch (error) {
+                console.error("無法讀取 RSS:", error);
+                return [];
+            }
+        }
+
+        async function loadRSSFeeds() {
+            const feedContainer = document.getElementById("rss-feed");
+            feedContainer.innerHTML = "<p>載入中...</p>";
+
+            let allItems = [];
+
+            for (const url of rssUrls) {
+                const items = await fetchRSS(url);
+                allItems = allItems.concat(items);
+            }
+
+            allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+
+            feedContainer.innerHTML = allItems.slice(0, 10).map(item => `
+                <div class="rss-item">
+                    <a href="${item.link}" target="_blank">${item.title}</a>
+                    <div class="rss-date">${new Date(item.pubDate).toLocaleString()}</div>
+                </div>
+            `).join("");
+        }
+
+        loadRSSFeeds();
+    </script>
+
+</body>
+</html>
