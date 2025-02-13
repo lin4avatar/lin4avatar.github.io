@@ -7,39 +7,73 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
+            max-width: 1200px;
             margin: 20px auto;
             padding: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
         }
         h1 {
+            width: 100%;
             text-align: center;
         }
+        .rss-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            width: 100%;
+        }
+        .rss-box {
+            border: 1px solid #ddd;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .rss-box h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
         .rss-item {
-            border-bottom: 1px solid #ddd;
-            padding: 10px 0;
+            margin-bottom: 10px;
         }
         .rss-item a {
             text-decoration: none;
             color: #0073e6;
-            font-size: 18px;
+            font-size: 16px;
         }
         .rss-item a:hover {
             text-decoration: underline;
         }
         .rss-date {
-            font-size: 14px;
+            font-size: 12px;
             color: gray;
+        }
+
+        /* RWD：當螢幕小於 768px 時，變成單欄 */
+        @media (max-width: 768px) {
+            .rss-container {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
 
     <h1>RSS 訂閱聚合</h1>
-    <div id="rss-feed"></div>
+    <div class="rss-container">
+        <!-- 這裡將動態插入 RSS 訂閱 -->
+    </div>
 
     <script>
-        const rssUrls = [
-            "https://www.nature.com/nature.rss" // 這裡可以添加更多 RSS 訂閱網址
+        const rssFeeds = [
+            { name: "Nature", url: "https://www.nature.com/nature.rss" },
+            { name: "New York Times - Science", url: "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml" },
+            { name: "BBC - Science", url: "http://feeds.bbci.co.uk/news/science_and_environment/rss.xml" },
+            { name: "NASA Breaking News", url: "https://www.nasa.gov/rss/dyn/breaking_news.rss" },
+            { name: "MIT Tech Review", url: "https://www.technologyreview.com/feed/" },
+            { name: "Ars Technica", url: "http://feeds.arstechnica.com/arstechnica/index" }
         ];
 
         async function fetchRSS(url) {
@@ -55,24 +89,29 @@
         }
 
         async function loadRSSFeeds() {
-            const feedContainer = document.getElementById("rss-feed");
+            const feedContainer = document.querySelector(".rss-container");
             feedContainer.innerHTML = "<p>載入中...</p>";
 
-            let allItems = [];
+            let content = "";
 
-            for (const url of rssUrls) {
-                const items = await fetchRSS(url);
-                allItems = allItems.concat(items);
+            for (const feed of rssFeeds) {
+                const items = await fetchRSS(feed.url);
+                const latestItems = items.slice(0, 3); // 只顯示最新的 3 篇文章
+
+                content += `
+                    <div class="rss-box">
+                        <h2>${feed.name}</h2>
+                        ${latestItems.map(item => `
+                            <div class="rss-item">
+                                <a href="${item.link}" target="_blank">${item.title}</a>
+                                <div class="rss-date">${new Date(item.pubDate).toLocaleString()}</div>
+                            </div>
+                        `).join("")}
+                    </div>
+                `;
             }
 
-            allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-
-            feedContainer.innerHTML = allItems.slice(0, 10).map(item => `
-                <div class="rss-item">
-                    <a href="${item.link}" target="_blank">${item.title}</a>
-                    <div class="rss-date">${new Date(item.pubDate).toLocaleString()}</div>
-                </div>
-            `).join("");
+            feedContainer.innerHTML = content;
         }
 
         loadRSSFeeds();
