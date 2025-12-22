@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>24H 時間檢核系統</title>
+    <style>
+        :root { --primary: #007aff; --bg: #f2f2f7; --success: #34c759; --danger: #ff3b30; }
+        body { font-family: -apple-system, system-ui; background-color: var(--bg); display: flex; justify-content: center; padding: 20px; margin: 0; }
+        .container { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); width: 100%; max-width: 360px; box-sizing: border-box; }
+        h2 { text-align: center; color: #1c1e21; margin: 0 0 20px 0; font-size: 1.4rem; }
+        
+        .section { background: #f9f9fb; padding: 15px; border-radius: 12px; margin-bottom: 12px; border: 1px solid #e5e5ea; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: #3a3a3c; font-size: 0.85rem; }
+        
+        /* 使用 Grid 解決跑版，固定時間欄位寬度 */
+        .input-row { 
+            display: grid; 
+            grid-template-columns: 1fr 80px; 
+            gap: 10px; 
+        }
+        input { 
+            width: 100%; padding: 12px; border: 1px solid #d1d1d6; border-radius: 8px; font-size: 16px; 
+            box-sizing: border-box; -webkit-appearance: none;
+        }
+        input::placeholder { color: #c7c7cc; }
+        
+        select { 
+            width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #d1d1d6; 
+            font-size: 15px; background: white; margin-bottom: 15px; -webkit-appearance: none;
+        }
+        
+        button { 
+            width: 100%; padding: 16px; background: var(--primary); color: white; 
+            border: none; border-radius: 12px; font-size: 18px; font-weight: 600; 
+            cursor: pointer; margin-top: 10px;
+        }
+        button:active { opacity: 0.7; }
+
+        .result { margin-top: 20px; padding: 15px; border-radius: 12px; display: none; border: 1px solid; }
+        .pass { background-color: #f2faf3; color: var(--success); border-color: var(--success); }
+        .fail { background-color: #fff5f5; color: var(--danger); border-color: var(--danger); }
+        .detail-log { font-size: 0.85rem; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ccc; }
+        .log-item { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>24H 時間檢核</h2>
+
+    <label>檢核規則</label>
+    <select id="ruleMode">
+        <option value="full">規則 1：需完整涵蓋 22-08 (10h)</option>
+        <option value="eight">規則 2：22-08 區間內滿 8h</option>
+    </select>
+
+    <div class="section">
+        <label>第一段時間</label>
+        <div class="input-row">
+            <input type="text" id="startDate" placeholder="YYYY/MM/DD" maxlength="10">
+            <input type="text" id="startTime" placeholder="22:00" maxlength="5">
+        </div>
+    </div>
+
+    <div class="section">
+        <label>第二段時間</label>
+        <div class="input-row">
+            <input type="text" id="endDate" placeholder="YYYY/MM/DD" maxlength="10">
+            <input type="text" id="endTime" placeholder="08:00" maxlength="5">
+        </div>
+    </div>
+
+    <button onclick="runCheck()">開始計算</button>
+
+    <div id="resultBox" class="result">
+        <strong id="statusTitle" style="font-size: 1.1rem;"></strong>
+        <div id="totalHrsText" style="margin: 5px 0;"></div>
+        <div id="detailLog" class="detail-log"></div>
+    </div>
+</div>
+
+<script>
+    // 輔助函數：補零
+    const formatInput = (el, type) => {
+        el.addEventListener('input', (e) => {
+            let v = e.target.value.replace(/\D/g, '');
+            if (type === 'date') {
+                if (v.length >= 5) v = v.slice(0,4) + '/' + v.slice(4,6) + (v.length>=7 ? '/' + v.slice(6,8) : v.slice(6));
+                else if (v.length >= 4) v = v.slice(0,4) + '/' + v.slice(4);
+            } else {
+                if (v.length >= 2) v = v.slice(0,2) + ":" + v.slice(2,4);
+            }
+            e.target.value = v;
+        });
+    };
+
+    formatInput(document.getElementById('startDate'), 'date');
+    formatInput(document.getElementById('endDate'), 'date');
+    formatInput(document.getElementById('startTime'), 'time');
+    formatInput(document.getElementById('endTime'), 'time');
+
+    function runCheck() {
+        const sD = document.getElementById('startDate').value;
+        const sT = document.getElementById('startTime').value;
+        const eD = document.getElementById('endDate').value;
+        const eT = document.getElementById('endTime').value;
+        const mode = document.getElementById('ruleMode').value;
+
+        if (!sD || !sT || !eD || !eT) return alert("請完整輸入日期與時間");
+
+        const start = new Date(sD + " " + sT);
+        const end = new Date(eD + " " + eT);
+
+        if (isNaN(start) || isNaN(end)) return alert("格式錯誤，請檢查日期");
+        if (end <= start) return alert("結束時間需晚於開始時間");
+
+        const totalHours = (end - start) / (1000 * 60 * 60);
+        let validNightShifts = 0;
+        let logsHtml = "";
+
+        // 掃描前後 3 天
+        let scanDate = new Date(start);
+        scanDate.setDate(scanDate.getDate() - 1);
+
+        for (let i = 0; i < 5; i++) {
+            let nightStart = new Date(scanDate);
+            nightStart.setHours(22, 0, 0, 0);
+            let nightEnd = new Date(nightStart);
+            nightEnd.setDate(nightEnd.getDate() + 1);
+            nightEnd.setHours(8, 0, 0, 0);
+
+            // 計算交集
+            let overlapS = new Date(Math.max(start, nightStart));
+            let overlapE = new Date(Math.min(end, nightEnd));
+            let overlapMs = overlapE - overlapS;
+            let overlapHrs = overlapMs > 0 ? overlapMs / (1000 * 60 * 60) : 0;
+
+            if (overlapHrs > 0) {
+                let isOk = (mode === 'full') ? (overlapHrs >= 10) : (overlapHrs >= 8);
+                if (isOk) validNightShifts++;
+                logsHtml += `<div class="log-item">
+                    <span>${nightStart.getMonth()+1}/${nightStart.getDate()} 夜間時段</span>
+                    <span>${overlapHrs.toFixed(1)}h ${isOk ? '✅' : '❌'}</span>
+                </div>`;
+            }
+            scanDate.setDate(scanDate.getDate() + 1);
+        }
+
+        const isPass = totalHours > 35 && validNightShifts >= 2;
+        const resBox = document.getElementById('resultBox');
+        resBox.style.display = 'block';
+        resBox.className = 'result ' + (isPass ? 'pass' : 'fail');
+        
+        document.getElementById('statusTitle').innerText = isPass ? "✅ 檢核通過" : "❌ 檢核失敗";
+        document.getElementById('totalHrsText').innerHTML = `總時數: <b>${totalHours.toFixed(1)}</b> 小時<br>有效次數: <b>${validNightShifts}</b> 次`;
+        document.getElementById('detailLog').innerHTML = logsHtml;
+    }
+</script>
+
+</body>
+</html>
